@@ -4,6 +4,17 @@ Demonstrates a regression in TypeScript >=6 where excess property checking on Pr
 
 ## The Problem
 
+Given this Prisma schema:
+
+```prisma
+model Post {
+  id   Int    @id @default(autoincrement())
+  name String
+}
+```
+
+Attempting to select a field that does not exist:
+
 ```ts
 const posts = await prisma.post.findMany({
   select: {
@@ -11,6 +22,10 @@ const posts = await prisma.post.findMany({
     name: true,
     nonExistentField: true, // TS5: error. TS>=6: silently passes.
   },
+})
+
+posts.forEach((post) => {
+  console.log(post.name, post.nonExistentField) // TS5: error. TS>=6: silently passes.
 })
 ```
 
@@ -53,6 +68,19 @@ prisma-ts-strict/
 └── Prisma 7 TS6/                # prisma@^7, typescript@^6
     └── ... (same files)
 ```
+
+### Schema
+
+Every project uses the same `schema.prisma`:
+
+```prisma
+model Post {
+  id   Int    @id @default(autoincrement())
+  name String
+}
+```
+
+Only `id` and `name` exist on the model — `nonExistentField` is intentionally not present.
 
 ### What's in each project
 
