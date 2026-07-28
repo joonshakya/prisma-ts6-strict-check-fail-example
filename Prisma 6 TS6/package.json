@@ -1,0 +1,16 @@
+{
+  "name": "prisma-6-ts6",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.0.0"
+  },
+  "devDependencies": {
+    "prisma": "^6.0.0",
+    "typescript": "^6.0.0"
+  }
+}
