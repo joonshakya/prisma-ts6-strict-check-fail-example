@@ -16,6 +16,7 @@ model Post {
 Attempting to select a field that does not exist:
 
 ```ts
+// Prisma 6 / 7 — object-based select
 const posts = await prisma.post.findMany({
   select: {
     id: true,
@@ -23,55 +24,66 @@ const posts = await prisma.post.findMany({
     nonExistentField: true, // TS5: error. TS>=6: silently passes.
   },
 })
-
-posts.forEach((post) => {
-  console.log(post.name, post.nonExistentField) // TS5: error. TS>=6: silently passes.
-})
 ```
 
-**TypeScript 5.x** (5.9.3) catches `nonExistentField` at compile time with:
+The same concept applies to **Prisma Next (Prisma 8)**, which uses a string-based `select()`:
 
-- `TS2353`: Object literal may only specify known properties, and 'nonExistentField' does not exist in type 'PostSelect<DefaultArgs>'.
-- `TS2339`: Property 'nonExistentField' does not exist on type '{ name: string; id: number; }'.
+```ts
+const posts = await db.orm.public.Post.select('id', 'name', 'nonExistentField').all()
+```
 
-**TypeScript >=6** (tested with 6.0.3) allows it through without any error.
+**TypeScript 5.x** (5.9.3) catches `nonExistentField` in both APIs:
+- Prisma 6/7: `TS2353` — Object literal may only specify known properties
+- Prisma 8: `TS2345` — Argument of type '"nonExistentField"' is not assignable
 
-This behavior is **identical across Prisma 6 and Prisma 7** — it is purely a TypeScript version regression.
+**TypeScript >=6** (tested with 6.0.3) behaves differently per API:
+
+| API style | TS5 | TS>=6 |
+|-----------|-----|-------|
+| **Object-based select** (Prisma 6/7) `{ nonExistentField: true }` | ❌ Error | ✅ **Silently passes** |
+| **String-based select** (Prisma 8) `'nonExistentField'` | ❌ Error | ❌ **Error** |
+
+The regression only affects **object literal excess property checking**. Prisma 8's string-based `select()` is immune.
 
 ## Project Structure
 
 ```
 prisma-ts-strict/
 ├── .gitignore
-├── package.json                 # Root: setup + typecheck:all scripts
-├── run-typecheck.sh             # Runs tsc --noEmit across all 4 projects
+├── package.json                    # Root: setup + typecheck:all scripts
+├── run-typecheck.sh                # Runs tsc --noEmit across all 6 projects
 ├── README.md
 │
-├── Prisma 6 TS5/                # prisma@^6, typescript@^5
-│   ├── .gitignore
+├── Prisma 6 TS5/                   # prisma@^6, typescript@^5
 │   ├── package.json
 │   ├── tsconfig.json
 │   ├── schema.prisma
 │   └── index.ts
-│
-├── Prisma 6 TS6/                # prisma@^6, typescript@^6
-│   └── ... (same files)
-│
-├── Prisma 7 TS5/                # prisma@^7, typescript@^5
-│   ├── .gitignore
+├── Prisma 6 TS6/                   # prisma@^6, typescript@^6
+├── Prisma 7 TS5/                   # prisma@^7, typescript@^5 (adds prisma.config.ts + adapter)
+├── Prisma 7 TS6/                   # prisma@^7, typescript@^6
+├── Prisma 8 TS5/                   # prisma-next@^0.16 (Prisma 8 early access), typescript@^5
 │   ├── package.json
 │   ├── tsconfig.json
-│   ├── schema.prisma
-│   ├── prisma.config.ts         # Prisma 7: separate config file
+│   ├── prisma-next.config.ts
+│   ├── src/prisma/contract.prisma
+│   ├── src/prisma/db.ts
 │   └── index.ts
-│
-└── Prisma 7 TS6/                # prisma@^7, typescript@^6
-    └── ... (same files)
+└── Prisma 8 TS6/                   # prisma-next@^0.16, typescript@^6
 ```
 
-### Schema
+## Schema
 
-Every project uses the same `schema.prisma`:
+**Prisma 6/7** use `schema.prisma`:
+
+```prisma
+model Post {
+  id   Int    @id @default(autoincrement())
+  name String
+}
+```
+
+**Prisma 8 (Prisma Next)** uses a contract file (`contract.prisma`) with the same model:
 
 ```prisma
 model Post {
@@ -82,16 +94,6 @@ model Post {
 
 Only `id` and `name` exist on the model — `nonExistentField` is intentionally not present.
 
-### What's in each project
-
-| File | Purpose |
-|------|---------|
-| `package.json` | Declares `@prisma/client`, `prisma`, and `typescript` at the target versions |
-| `tsconfig.json` | `strict: true`, `noEmit: true`, targeting ES2022 |
-| `schema.prisma` | Single `Post` model with `id: Int` and `name: String` |
-| `index.ts` | Initializes PrismaClient, calls `findMany` with `select: { id, name, nonExistentField }`, then logs `post.name` and `post.nonExistentField` (runtime access to the phantom field) |
-| `prisma.config.ts` | (Prisma 7 only) — replaces `url` in schema, uses `@prisma/adapter-libsql` |
-
 ## Prerequisites
 
 - [Bun](https://bun.sh/) >= 1.3.0
@@ -99,26 +101,28 @@ Only `id` and `name` exist on the model — `nonExistentField` is intentionally 
 ## Setup
 
 ```bash
-# Install dependencies, generate Prisma Client, push schema to SQLite
 bun run setup
 ```
 
-This runs `bun install && prisma generate && prisma db push` inside each of the 4 project directories.
+This runs:
+- Prisma 6/7: `bun install && prisma generate && prisma db push`
+- Prisma 8: `bun install && prisma-next contract emit`
 
 ## Run Type Checks
 
 ```bash
-# Run tsc --noEmit on all 4 projects
 bun run typecheck:all
 ```
 
-Or run individually:
+Or individually:
 
 ```bash
 (cd "Prisma 6 TS5" && bun run typecheck)
 (cd "Prisma 6 TS6" && bun run typecheck)
 (cd "Prisma 7 TS5" && bun run typecheck)
 (cd "Prisma 7 TS6" && bun run typecheck)
+(cd "Prisma 8 TS5" && bun run typecheck)
+(cd "Prisma 8 TS6" && bun run typecheck)
 ```
 
 ## Results
@@ -128,33 +132,43 @@ Or run individually:
 === Prisma 6 TS6 ===     → OK    (no errors)
 === Prisma 7 TS5 ===     → FAIL  (TS2353 + TS2339 on nonExistentField)
 === Prisma 7 TS6 ===     → OK    (no errors)
+=== Prisma 8 TS5 ===     → FAIL  (TS2345 + TS2339 on nonExistentField)
+=== Prisma 8 TS6 ===     → FAIL  (TS2345 + TS2339 on nonExistentField)
 ```
 
-| Folder | Prisma | TypeScript | `nonExistentField` caught? | Errors |
-|--------|--------|-----------|---------------------------|--------|
-| Prisma 6 TS5 | 6.19.3 | 5.9.3 | ✅ Yes | `TS2353`, `TS2339` |
-| Prisma 6 TS6 | 6.19.3 | 6.0.3 | ❌ No | none |
-| Prisma 7 TS5 | 7.9.1 | 5.9.3 | ✅ Yes | `TS2353`, `TS2339` |
-| Prisma 7 TS6 | 7.9.1 | 6.0.3 | ❌ No | none |
+| Folder | Prisma | TypeScript | API style | `nonExistentField` caught? | Errors |
+|--------|--------|-----------|-----------|---------------------------|--------|
+| Prisma 6 TS5 | 6.19.3 | 5.9.3 | Object `select` | ✅ Yes | `TS2353`, `TS2339` |
+| Prisma 6 TS6 | 6.19.3 | 6.0.3 | Object `select` | ❌ No | none |
+| Prisma 7 TS5 | 7.9.1 | 5.9.3 | Object `select` | ✅ Yes | `TS2353`, `TS2339` |
+| Prisma 7 TS6 | 7.9.1 | 6.0.3 | Object `select` | ❌ No | none |
+| Prisma 8 TS5 | 0.16.0 | 5.9.3 | String `select()` | ✅ Yes | `TS2345`, `TS2339` |
+| Prisma 8 TS6 | 0.16.0 | 6.0.3 | String `select()` | ✅ Yes | `TS2345`, `TS2339` |
 
 ## Analysis
 
-- **TypeScript 5.9.3** correctly rejects `nonExistentField` in the `select` object literal. This is standard excess property checking on generic types — the same behavior that has kept Prisma's `select` type-safe since Prisma adopted strict `Select` types.
+- **TypeScript 5.9.3** catches `nonExistentField` in both API styles. Object literal excess property checking and string literal union checking both work.
 
-- **TypeScript >=6** (tested with 6.0.3) no longer performs this check. The `select` object compiles without error, meaning a field that does not exist on the model can be passed through without any compile-time warning. At runtime it resolves to `undefined`.
+- **TypeScript >=6** (tested with 6.0.3) drops **object literal excess property checking**. Prisma 6/7's `select: { nonExistentField: true }` compiles without error. At runtime the field resolves to `undefined`.
 
-- The regression is **TypeScript-only**. Prisma 6 and Prisma 7 behave identically when paired with the same TypeScript version. Prisma 7's generated types use the same `PostSelect` pattern — excess property checking is purely a TypeScript compiler concern.
+- **Prisma 8 (Prisma Next)** is **not affected** because its `select('id', 'name')` API uses string arguments constrained by a `keyof` union, not object literal keys on a mapped type. TS>=6 still validates string literal assignability correctly.
 
-- Both errors (`TS2353` for the select object, `TS2339` for accessing the result) are missing in TS>=6. This means the entire unsafe field path — declaration to access — goes unchecked.
+- The regression is **TypeScript-only**. Prisma 6 and Prisma 7 behave identically at the same TS version. Prisma 7's generated types use the same `PostSelect` pattern as Prisma 6.
+
+- Both errors (`TS2353` for the select object, `TS2339` for accessing the result) are missing in TS>=6 for Prisma 6/7. The entire unsafe field path — declaration to access — goes unchecked.
+
+- **Mitigation**: Projects on Prisma 6/7 that upgrade to TS>=6 lose type safety on `select` objects. Options include:
+  - Migrating to Prisma Next's string-based API when Prisma 8 ships
+  - Adding runtime validation for selected fields
+  - Using eslint or other linting tools to enforce field existence
 
 ## Version Details
-
-All package versions resolved at time of testing:
 
 | Package | Version |
 |---------|---------|
 | bun | 1.3.14 |
 | @prisma/client (v6 track) | 6.19.3 |
 | @prisma/client (v7 track) | 7.9.1 |
+| prisma-next | 0.16.0 |
 | typescript (v5 track) | 5.9.3 |
 | typescript (>=6 track) | 6.0.3 |

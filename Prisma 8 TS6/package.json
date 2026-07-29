@@ -1,0 +1,19 @@
+{
+  "name": "prisma-8-ts6",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "contract:emit": "prisma-next contract emit",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@prisma-next/postgres": "^0.16.0",
+    "dotenv": "^17.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "prisma-next": "^0.16.0",
+    "typescript": "^6.0.0"
+  }
+}

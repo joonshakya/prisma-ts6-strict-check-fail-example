@@ -4,3 +4,4 @@ dev.db-journal
 *.db
 *.db-journal
 .env
+dist/
