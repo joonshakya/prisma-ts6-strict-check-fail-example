@@ -1,0 +1,10 @@
+{
+  "plugins": ["typescript"],
+  "jsPlugins": ["./oxlint-prisma-plugin/index.cjs"],
+  "rules": {
+    "prisma/no-unknown-select-field": ["error", { "schemaDir": "." }],
+    "prisma/no-unknown-where-field": ["error", { "schemaDir": "." }],
+    "prisma/no-unknown-data-field": ["error", { "schemaDir": "." }],
+    "prisma/no-unknown-orderby-field": ["error", { "schemaDir": "." }]
+  }
+}

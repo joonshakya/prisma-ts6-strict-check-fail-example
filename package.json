@@ -2,7 +2,7 @@
   "name": "prisma-ts-strict-demo",
   "private": true,
   "scripts": {
-    "setup": "for d in 'Prisma 6 TS5' 'Prisma 6 TS6' 'Prisma 7 TS5' 'Prisma 7 TS6'; do (cd \"$d\" && bun install && bunx prisma generate && bunx prisma db push); done && for d in 'Prisma 8 TS5' 'Prisma 8 TS6'; do (cd \"$d\" && bun install && bunx prisma-next contract emit); done",
+    "setup": "for d in 'Prisma 6 TS5' 'Prisma 6 TS6' 'Prisma 7 TS5' 'Prisma 7 TS6' 'Prisma 6 TS6 oxlint' 'Prisma 7 TS6 oxlint'; do (cd \"$d\" && bun install && bunx prisma generate && bunx prisma db push); done && for d in 'Prisma 8 TS5' 'Prisma 8 TS6'; do (cd \"$d\" && bun install && bunx prisma-next contract emit); done",
     "typecheck:all": "bash run-typecheck.sh"
   }
 }

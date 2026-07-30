@@ -69,7 +69,9 @@ prisma-ts-strict/
 │   ├── src/prisma/contract.prisma
 │   ├── src/prisma/db.ts
 │   └── index.ts
-└── Prisma 8 TS6/                   # prisma-next@^0.16, typescript@^6
+├── Prisma 8 TS6/                   # prisma-next@^0.16, typescript@^6
+├── Prisma 6 TS6 oxlint/            # prisma@^6, typescript@^6, + oxlint prisma plugin
+└── Prisma 7 TS6 oxlint/            # prisma@^7, typescript@^6, + oxlint prisma plugin
 ```
 
 ## Schema
@@ -107,6 +109,7 @@ bun run setup
 This runs:
 - Prisma 6/7: `bun install && prisma generate && prisma db push`
 - Prisma 8: `bun install && prisma-next contract emit`
+- Prisma 6/7 oxlint: `bun install && prisma generate && prisma db push`
 
 ## Run Type Checks
 
@@ -123,6 +126,13 @@ Or individually:
 (cd "Prisma 7 TS6" && bun run typecheck)
 (cd "Prisma 8 TS5" && bun run typecheck)
 (cd "Prisma 8 TS6" && bun run typecheck)
+(cd "Prisma 6 TS6 oxlint" && bun run typecheck)
+(cd "Prisma 7 TS6 oxlint" && bun run typecheck)
+
+Lint with oxlint:
+```bash
+(cd "Prisma 6 TS6 oxlint" && bun run lint)
+(cd "Prisma 7 TS6 oxlint" && bun run lint)
 ```
 
 ## Results
@@ -134,6 +144,8 @@ Or individually:
 === Prisma 7 TS6 ===     → OK    (no errors)
 === Prisma 8 TS5 ===     → FAIL  (TS2345 + TS2339 on nonExistentField)
 === Prisma 8 TS6 ===     → FAIL  (TS2345 + TS2339 on nonExistentField)
+=== Prisma 6 TS6 oxlint === → OK    (no errors from tsc; oxlint catches it)
+=== Prisma 7 TS6 oxlint === → OK    (no errors from tsc; oxlint catches it)
 ```
 
 | Folder | Prisma | TypeScript | API style | `nonExistentField` caught? | Errors |
@@ -144,6 +156,8 @@ Or individually:
 | Prisma 7 TS6 | 7.9.1 | 6.0.3 | Object `select` | ❌ No | none |
 | Prisma 8 TS5 | 0.16.0 | 5.9.3 | String `select()` | ✅ Yes | `TS2345`, `TS2339` |
 | Prisma 8 TS6 | 0.16.0 | 6.0.3 | String `select()` | ✅ Yes | `TS2345`, `TS2339` |
+| Prisma 6 TS6 oxlint | 6.19.3 | 6.0.3 | Object `select` + oxlint | ✅ Caught by oxlint | none from tsc |
+| Prisma 7 TS6 oxlint | 7.9.1 | 6.0.3 | Object `select` + oxlint | ✅ Caught by oxlint | none from tsc |
 
 ## Analysis
 
@@ -161,6 +175,45 @@ Or individually:
   - Migrating to Prisma Next's string-based API when Prisma 8 ships
   - Adding runtime validation for selected fields
   - Using eslint or other linting tools to enforce field existence
+
+## oxlint Prisma Plugin
+
+An [oxlint](https://oxc.rs) plugin by [LeonMueller-OneAndOnly](https://github.com/prisma/prisma/issues/29519#issuecomment-4989792595) (shared in [prisma#29519 comment](https://github.com/prisma/prisma/issues/29519#issuecomment-4989792595)) catches non-existent fields via syntax analysis of the Prisma schema — no type information needed. 4 rules:
+
+| Rule | Covers |
+| --- | --- |
+| `no-unknown-select-field` | `select` / `include`, nested and across `select`↔`include`. Rejects scalars in `include` (relations only). |
+| `no-unknown-where-field` | `where` and `cursor`, through `AND`/`OR`/`NOT`, relation filters (`some`/`every`/`none`/`is`/`isNot`) and to-one shorthand. |
+| `no-unknown-data-field` | `data` for create/update/upsert/createMany, including nested writes. |
+| `no-unknown-orderby-field` | `orderBy` including ordering through to-one relations. |
+
+**Verified results** — both projects with `oxlint@1.76.0` + plugin on TS 6.0.3:
+
+| Project | `tsc --noEmit` | `oxlint --deny-warnings` |
+|---------|---------------|------------------------|
+| Prisma 6 TS6 oxlint | ✅ No errors (regression) | ❌ `nonExistentField` caught |
+| Prisma 7 TS6 oxlint | ✅ No errors (regression) | ❌ `nonExistentField` caught |
+
+Config (`.oxlintrc.json`):
+```json
+{
+  "plugins": ["typescript"],
+  "jsPlugins": ["./oxlint-prisma-plugin/index.cjs"],
+  "rules": {
+    "prisma/no-unknown-select-field": ["error", { "schemaDir": "." }],
+    "prisma/no-unknown-where-field": ["error", { "schemaDir": "." }],
+    "prisma/no-unknown-data-field": ["error", { "schemaDir": "." }],
+    "prisma/no-unknown-orderby-field": ["error", { "schemaDir": "." }]
+  }
+}
+```
+
+The plugin reads `schema.prisma` directly and caches the parse per process (~5 ms). It works standalone — no generated types, no TS version dependency. False positives on computed keys / spreads are avoided (skipped rather than guessed at).
+
+**Not covered** (by design):
+- Filters built as a variable (`const f = {…}; db.user.findMany({ where: f })`) — was never type-checked, syntax-only rule can't follow bindings.
+- Operator typos beside a valid operator (`{ contains: "x", modee: "insensitive" }`) — valid operator set varies by field type, flagging risks false positives.
+- `orderBy` / `where` nested inside `select` or `include` — only top-level argument is walked.
 
 ## Version Details
 
